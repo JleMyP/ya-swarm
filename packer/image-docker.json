@@ -1,0 +1,34 @@
+{
+  "builders": [
+    {
+      "type": "yandex",
+      "token": "{{user `token`}}",
+      "folder_id": "{{user `folder_id`}}",
+      "zone": "ru-central1-a",
+
+      "image_name": "ubuntu-20-docker-{{isotime | clean_resource_name}}",
+      "image_family": "ubuntu-20-docker",
+      "image_description": "family = ubuntu-20-docker",
+
+      "source_image_folder_id": "{{user `folder_id`}}",
+      "source_image_family": "ubuntu-20-minimal",
+
+      "use_ipv4_nat": true,
+      "disk_type": "network-ssd",
+      "disk_size_gb": 5,
+      "instance_mem_gb": 2,
+      "platform_id": "standard-v2",
+      "preemptible": true,
+      "ssh_username": "ubuntu"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": [
+        "sudo apt-get update -y",
+        "sudo apt-get install docker.io -y"
+      ]
+    }
+  ]
+}

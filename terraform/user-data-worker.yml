@@ -1,0 +1,18 @@
+#cloud-config
+
+datasource:
+  Ec2:
+    strict_id: false
+
+ssh_pwauth: no
+
+users:
+  - name: tim
+    groups: sudo, docker
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh-authorized-keys:
+      - ${ssh-pub-key}
+
+runcmd:
+  - docker swarm join --token ${swarm-token} ${master-host}:2377

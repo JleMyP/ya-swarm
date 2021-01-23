@@ -1,0 +1,168 @@
+version: "3.8"
+
+services:
+  # TODO: поменять образ или выкинуть и поменять скраппинг в прометее
+  dockerd-exporter:
+    image: stefanprodan/caddy
+    networks:
+      - net
+    environment:
+      - DOCKER_GWBRIDGE_IP=172.18.0.1
+    configs:
+      - source: dockerd_config
+        target: /etc/caddy/Caddyfile
+    deploy:
+      mode: global
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  cadvisor:
+    image: google/cadvisor
+    networks:
+      - net
+    command: -logtostderr -docker_only
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/rootfs:ro
+      - /var/run:/var/run
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    deploy:
+      mode: global
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  grafana:
+    image: grafana/grafana:7.3.6
+    networks:
+      - default
+      - net
+      - proxy_public
+    environment:
+      - GF_SECURITY_ADMIN_USER=${ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./grafana/provisioning/prometheus.yml:/etc/grafana/provisioning/datasources/prometheus.yml
+      - ./grafana/provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/provider.yml
+      - ./grafana/dashboards/:/etc/grafana/dashboards/
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.swarmprom-grafana-http.rule=Host(`grafana.${DOMAIN}`)
+        - traefik.http.routers.swarmprom-grafana-http.entrypoints=http
+        - traefik.http.services.swarmprom-grafana.loadbalancer.server.port=3000
+
+  alertmanager:
+    image: prom/alertmanager:v0.21.0
+    networks:
+      - default
+      - net
+      - proxy_public
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - alertmanager:/alertmanager
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.swarmprom-alertmanager-http.rule=Host(`alertmanager.${DOMAIN}`)
+        - traefik.http.routers.swarmprom-alertmanager-http.entrypoints=http
+        - traefik.http.services.swarmprom-alertmanager.loadbalancer.server.port=9093
+
+  node-exporter:
+    image: prom/node-exporter:v1.0.1
+    networks:
+      - net
+    environment:
+      - NODE_ID={{.Node.ID}}
+    volumes:
+      - /:/host:ro,rslave
+      - /etc/hostname:/etc/nodename
+    command:
+      - --path.rootfs=/host
+      - --collector.textfile.directory=/etc/node-exporter/
+      - --collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)
+      - --no-collector.ipvs
+    deploy:
+      mode: global
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  prometheus:
+    image: prom/prometheus:v2.23.0
+    networks:
+      - default
+      - net
+      - proxy_public
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention=${PROMETHEUS_RETENTION:-24h}
+    volumes:
+      - prometheus:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    configs:
+      # TODO: traefik
+      - source: node_rules
+        target: /etc/prometheus/swarm_node.rules.yml
+      - source: task_rules
+        target: /etc/prometheus/swarm_task.rules.yml
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          memory: 2048M
+        reservations:
+          memory: 128M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.swarmprom-prometheus-http.rule=Host(`prometheus.${DOMAIN}`)
+        - traefik.http.routers.swarmprom-prometheus-http.entrypoints=http
+        - traefik.http.services.swarmprom-prometheus.loadbalancer.server.port=9090
+
+networks:
+  net:
+    driver: overlay
+    attachable: true
+  proxy_public:
+    external: true
+
+volumes:
+  prometheus: {}
+  grafana: {}
+  alertmanager: {}
+
+configs:
+  dockerd_config:
+    file: ./dockerd-exporter/Caddyfile
+  node_rules:
+    file: ./prometheus/swarm_node.rules.yml
+  task_rules:
+    file: ./prometheus/swarm_task.rules.yml

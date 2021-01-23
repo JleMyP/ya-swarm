@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: "traefik:2.3"
+    command:
+      - --entrypoints.http.address=:80
+      - --entrypoints.https.address=:443
+      - --providers.docker
+      - --providers.docker.swarmMode
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=proxy_public
+      - --api
+      - --accesslog
+      - --log.level=ERROR
+      - --metrics.prometheus=true
+      - --certificatesresolvers.le.acme.storage=/certificates/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      - --certificatesresolvers.le.acme.email=${EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - public
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "public_certificates:/certificates"
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)
+        - traefik.http.routers.dashboard.service=api@internal
+        # - traefik.http.routers.dashboard.entrypoints=http
+        # - traefik.http.routers.dashboard.middlewares=auth
+        # - traefik.http.routers.dashboard.middlewares=https-redirect
+        # - traefik.http.routers.dashboard-https.rule=Host(`traefik.${DOMAIN}`)
+        # - traefik.http.routers.dashboard-https.entrypoints=https
+        # - traefik.http.routers.dashboard-https.tls=true
+        # - traefik.http.routers.dashboard-https.tls.certresolver=le
+        # - traefik.http.middlewares.auth.basicauth.users=test:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/,test2:$$apr1$$d9hr9HBB$$4HxwgUir3HP4EsggP/QNo0
+        - traefik.http.services.dashboard-s.loadbalancer.server.port=9999
+
+volumes:
+  public_certificates:
+
+networks:
+  public:
+    driver: overlay
+    attachable: true

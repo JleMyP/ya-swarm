@@ -1,0 +1,46 @@
+{
+  "builders": [
+    {
+      "type": "yandex",
+      "token": "{{user `token`}}",
+      "folder_id": "{{user `folder_id`}}",
+      "zone": "ru-central1-a",
+
+      "image_name": "ubuntu-20-minimal-{{isotime | clean_resource_name}}",
+      "image_family": "ubuntu-20-minimal",
+      "image_description": "family = ubuntu-20-minimal",
+
+      "source_image_family": "ubuntu-2004-lts",
+
+      "use_ipv4_nat": true,
+      "disk_type": "network-ssd",
+      "disk_size_gb": 5,
+      "instance_mem_gb": 2,
+      "platform_id": "standard-v2",
+      "preemptible": true,
+      "ssh_username": "ubuntu"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": [
+        "sudo apt-mark hold cloud-init",
+        "sudo apt-get update -y",
+        "sudo apt-get upgrade -y",
+        "sudo apt-get install tmux git htop -y",
+        "curl https://getmic.ro | bash",
+
+        "sudo timedatectl set-timezone Asia/Yekaterinburg",
+        "sudo apt-get install language-pack-ru -y",
+        "sudo localectl set-locale LANG=ru_RU.utf8",
+
+        "sudo swapoff /swapfile",
+        "sudo fallocate -l 1G /swapfile",
+        "sudo chmod 600 /swapfile",
+        "sudo mkswap /swapfile",
+        "sudo swapon /swapfile"
+      ]
+    }
+  ]
+}
